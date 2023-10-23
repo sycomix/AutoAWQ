@@ -6,10 +6,7 @@ import logging
 
 def auto_parallel(args):
     model_size = args.model_path.split("-")[-1]
-    if model_size.endswith("m"):
-        model_gb = 1
-    else:
-        model_gb = float(model_size[:-1])
+    model_gb = 1 if model_size.endswith("m") else float(model_size[:-1])
     if model_gb < 20:
         n_gpu = 1
     elif model_gb < 50:

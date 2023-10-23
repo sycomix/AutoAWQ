@@ -40,18 +40,18 @@ def generate(model, input_ids, n_generate):
     return context_time, generate_time
 
 def run_round(model_path, quant_file, n_generate, input_ids, batch_size, safetensors):
-    print(f" -- Loading model...")
+    print(" -- Loading model...")
     model = AutoAWQForCausalLM.from_quantized(
         model_path, quant_file, fuse_layers=True,
         max_new_tokens=n_generate, batch_size=batch_size,
         safetensors=safetensors
     )
 
-    print(f" -- Warming up...")
+    print(" -- Warming up...")
     warmup(model)
 
     print(f" -- Generating {n_generate} tokens, {input_ids.shape[1]} in context...")
-    
+
     try:
         context_time, generate_time = generate(model, input_ids, n_generate)
         successful_generate = True
@@ -60,7 +60,7 @@ def run_round(model_path, quant_file, n_generate, input_ids, batch_size, safeten
             successful_generate = False
         else:
             raise RuntimeError(ex)
-    
+
     device = next(model.parameters()).device
     memory_used = torch.cuda.max_memory_allocated(device) / (1024 ** 3)
     memory_pct = memory_used / (torch.cuda.get_device_properties(device).total_memory / (1024 ** 3)) * 100

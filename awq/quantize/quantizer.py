@@ -68,12 +68,16 @@ class AwqQuantizer:
             )
             scales_list = [self._search_best_scale(self.modules[i], **layer) for layer in module_config]
             apply_scale(self.modules[i], scales_list, input_feat_dict=input_feat)
-            scales_list = append_str_prefix(scales_list, get_op_name(self.model, self.modules[i]) + ".")
+            scales_list = append_str_prefix(
+                scales_list, f"{get_op_name(self.model, self.modules[i])}."
+            )
 
             # [STEP 3]: Compute and apply clipping list
             clip_list = self._search_best_clip(self.modules[i], named_linears, input_feat)
             apply_clip(self.modules[i], clip_list)
-            clip_list = append_str_prefix(clip_list, get_op_name(self.model, self.modules[i]) + ".")
+            clip_list = append_str_prefix(
+                clip_list, f"{get_op_name(self.model, self.modules[i])}."
+            )
 
             # [STEP 4]: Quantize weights
             self._apply_quant(self.modules[i], named_linears)
@@ -116,10 +120,10 @@ class AwqQuantizer:
         if module2inspect is None:
             assert len(layers) == 1
             module2inspect = layers[0]
-        
+
         if "use_cache" in kwargs:
             kwargs.pop("use_cache")
-        
+
         # Put x on the right device
         inp = inp.to(next(module2inspect.parameters()).device)
 
@@ -140,14 +144,18 @@ class AwqQuantizer:
             fp16_output = module2inspect(inp, **kwargs)
             if isinstance(fp16_output, tuple):
                 fp16_output = fp16_output[0]
-        
+
         # [STEP 4]: Compute loss
         best_scales = self._compute_best_scale(
             inp, w_max, x_max, module2inspect,
             layers, fp16_output, kwargs
         )
-        
-        return (get_op_name(module, prev_op), tuple([get_op_name(module, m) for m in layers]), best_scales)
+
+        return (
+            get_op_name(module, prev_op),
+            tuple(get_op_name(module, m) for m in layers),
+            best_scales,
+        )
 
     def _compute_best_scale(self, x, w_max, x_max, module2inspect, linears2scale: List[nn.Linear],
                                   fp16_output, kwargs={}):
@@ -216,7 +224,7 @@ class AwqQuantizer:
 
         for name in named_linears:
             # due to qk bmm, it is hard to clip precisely
-            if any([_ in name for _ in avoid_clipping]):
+            if any(_ in name for _ in avoid_clipping):
                 continue
 
             named_linears[name].cuda()
@@ -224,7 +232,7 @@ class AwqQuantizer:
             clip_list.append((name, max_val))
 
             named_linears[name].cpu()
-        
+
         return clip_list
 
     @torch.no_grad()

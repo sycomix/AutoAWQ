@@ -60,17 +60,20 @@ def get_include_dirs():
     return include_dirs
 
 def get_generator_flag():
-    generator_flag = []
     torch_dir = torch.__path__[0]
-    if os.path.exists(os.path.join(torch_dir, "include", "ATen", "CUDAGeneratorImpl.h")):
-        generator_flag = ["-DOLD_GENERATOR_PATH"]
-    
-    return generator_flag
+    return (
+        ["-DOLD_GENERATOR_PATH"]
+        if os.path.exists(
+            os.path.join(torch_dir, "include", "ATen", "CUDAGeneratorImpl.h")
+        )
+        else []
+    )
 
 def check_dependencies():
     if CUDA_HOME is None:
         raise RuntimeError(
-            f"Cannot find CUDA_HOME. CUDA must be available to build the package.")
+            "Cannot find CUDA_HOME. CUDA must be available to build the package."
+        )
 
 def get_compute_capabilities():
     # Collect the compute capabilities of all available GPUs.
@@ -99,10 +102,7 @@ if os.name == "nt":
     include_arch = os.getenv("INCLUDE_ARCH", "1") == "1"
 
     # Relaxed args on Windows
-    if include_arch:
-        extra_compile_args={"nvcc": arch_flags}
-    else:
-        extra_compile_args={}
+    extra_compile_args = {"nvcc": arch_flags} if include_arch else {}
 else:
     extra_compile_args={
         "cxx": ["-g", "-O3", "-fopenmp", "-lgomp", "-std=c++17", "-DENABLE_BF16"],

@@ -26,15 +26,14 @@ class RoPE(nn.Module):
         freqs = 1.0 / (theta ** (torch.arange(0, dim, 2)[: (dim // 2)].float() / dim))
         t = torch.arange(end)
         freqs = torch.outer(t, freqs).float()
-        freqs_cis = torch.polar(torch.ones_like(freqs), freqs)
-        return freqs_cis
+        return torch.polar(torch.ones_like(freqs), freqs)
 
     @staticmethod
     def reshape_for_broadcast(freqs_cis: torch.Tensor, x: torch.Tensor):
         ndim = x.ndim
         assert 0 <= 1 < ndim
         assert freqs_cis.shape == (x.shape[1], x.shape[-1])
-        shape = [d if i == 1 or i == ndim - 1 else 1 for i, d in enumerate(x.shape)]
+        shape = [d if i in [1, ndim - 1] else 1 for i, d in enumerate(x.shape)]
         return freqs_cis.view(*shape)
 
     def forward(self, xq: torch.Tensor, xk: torch.Tensor, start_pos: int, seqlen: int):

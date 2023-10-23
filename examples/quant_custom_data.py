@@ -17,9 +17,9 @@ def load_dolly():
     # concatenate data
     def concatenate_data(x):
         return {"text": x['instruction'] + '\n' + x['context'] + '\n' + x['response']}
-    
+
     concatenated = data.map(concatenate_data)
-    return [text for text in concatenated["text"]]
+    return list(concatenated["text"])
 
 def load_wikitext():
     data = load_dataset('wikitext', 'wikitext-2-raw-v1', split="train")

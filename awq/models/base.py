@@ -96,12 +96,10 @@ class BaseAWQForCausalLM(nn.Module):
         
         
     @classmethod
-    def from_pretrained(self, model_path, model_type, torch_dtype: torch.dtype = torch.float16, 
-                        trust_remote_code=True, safetensors=False, device_map=None,
-                        **model_init_kwargs):
+    def from_pretrained(cls, model_path, model_type, torch_dtype: torch.dtype = torch.float16, trust_remote_code=True, safetensors=False, device_map=None, **model_init_kwargs):
         # Get weights path and quant config
-        model_weights_path, config, quant_config = self._load_config(
-            self, model_path, '', safetensors, trust_remote_code=trust_remote_code
+        model_weights_path, config, quant_config = cls._load_config(
+            cls, model_path, '', safetensors, trust_remote_code=trust_remote_code
         )
 
         if device_map is None:
@@ -110,9 +108,7 @@ class BaseAWQForCausalLM(nn.Module):
 
             # Get device map
             device_map = infer_auto_device_map(
-                model,
-                no_split_module_classes=[self.layer_type], 
-                dtype=torch_dtype
+                model, no_split_module_classes=[cls.layer_type], dtype=torch_dtype
             )
             del model
 
@@ -127,35 +123,36 @@ class BaseAWQForCausalLM(nn.Module):
 
         model.eval()
 
-        return self(model, model_type, is_quantized=False, quant_config=quant_config)
+        return cls(model, model_type, is_quantized=False, quant_config=quant_config)
 
     @classmethod
-    def from_quantized(self, model_path, model_type, model_filename='', 
-                             max_new_tokens=None, torch_dtype=torch.float16, 
-                             trust_remote_code=True, safetensors=False, is_quantized=True, 
-                             fuse_layers=False, version='GEMM',
-                             max_memory=None, offload_folder=None):
+    def from_quantized(cls, model_path, model_type, model_filename='', max_new_tokens=None, torch_dtype=torch.float16, trust_remote_code=True, safetensors=False, is_quantized=True, fuse_layers=False, version='GEMM', max_memory=None, offload_folder=None):
         # [STEP 1-2] Load weights path and configs
-        model_weights_path, config, quant_config = self._load_config(
-            self, model_path, model_filename, safetensors, version, 
-            trust_remote_code, max_new_tokens=max_new_tokens
+        model_weights_path, config, quant_config = cls._load_config(
+            cls,
+            model_path,
+            model_filename,
+            safetensors,
+            version,
+            trust_remote_code,
+            max_new_tokens=max_new_tokens,
         )
-        
+
         # [STEP 3] Load model
         with init_empty_weights():
             model = AutoModelForCausalLM.from_config(config=config, torch_dtype=torch_dtype, trust_remote_code=trust_remote_code)
-        
+
         # Prepare WQLinear layers, replace nn.Linear
-        self._load_quantized_modules(self, model, quant_config, quant_config["version"])
-        
+        cls._load_quantized_modules(cls, model, quant_config, quant_config["version"])
+
         model.tie_weights()
 
         # Get device map
         device_map = infer_auto_device_map(
             model,
-            no_split_module_classes=[self.layer_type], 
+            no_split_module_classes=[cls.layer_type],
             max_memory=max_memory,
-            dtype=torch_dtype
+            dtype=torch_dtype,
         )
 
         # Load checkpoint
@@ -166,10 +163,10 @@ class BaseAWQForCausalLM(nn.Module):
             offload_folder=offload_folder,
             dtype=torch_dtype
         )
-        
+
         # Dispath to devices
         if fuse_layers:
-            self.fuse_layers(model, quant_config)
+            cls.fuse_layers(model, quant_config)
 
         # Offloading dispatch
         from accelerate import dispatch_model
@@ -178,9 +175,11 @@ class BaseAWQForCausalLM(nn.Module):
             device_map=device_map,
             offload_dir=offload_folder
         )
-        
 
-        return self(model, model_type, is_quantized=is_quantized, quant_config=quant_config)
+
+        return cls(
+            model, model_type, is_quantized=is_quantized, quant_config=quant_config
+        )
 
     def _load_config(self, model_path, model_filename, safetensors=False, 
                            version="GEMM", trust_remote_code=True, max_new_tokens=4096):
@@ -191,11 +190,11 @@ class BaseAWQForCausalLM(nn.Module):
                 ignore_patterns.extend(["*.pt*", "*.bin*"])
             else:
                 ignore_patterns.append("*.safetensors*")
-            
+
             model_path = snapshot_download(model_path, ignore_patterns=ignore_patterns)
-        
+
         if model_filename != '':
-            model_weights_path = model_path + f'/{model_filename}'
+            model_weights_path = f'{model_path}/{model_filename}'
         else:
             model_weights_path = model_path
 
@@ -205,13 +204,13 @@ class BaseAWQForCausalLM(nn.Module):
         if os.path.exists(quant_config_path):
             with open(quant_config_path, 'r') as file:
                 quant_config = json.loads(file.read())
-            
+
             if "version" not in quant_config.keys():
                 quant_config["version"] = version
         else:
             # Default config that works for most models
             quant_config = {"zero_point": True, "q_group_size": 128, "w_bit": 4, "version": version}
-        
+
         # Load model config and set max generation length
         if max_new_tokens is None and hasattr(self, 'max_new_tokens_key'):
             config = AutoConfig.from_pretrained(model_path, trust_remote_code=trust_remote_code)
@@ -220,7 +219,7 @@ class BaseAWQForCausalLM(nn.Module):
             max_new_tokens = 2048 if max_new_tokens is None else max_new_tokens
             config = AutoConfig.from_pretrained(model_path, trust_remote_code=trust_remote_code)
             config.max_new_tokens = max_new_tokens
-        
+
         return model_weights_path, config, quant_config
 
     def _load_quantized_modules(self, model, quant_config, version):

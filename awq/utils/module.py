@@ -37,7 +37,7 @@ def append_str_prefix(x, prefix):
     if isinstance(x, str):
         return prefix + x
     elif isinstance(x, tuple):
-        return tuple([append_str_prefix(y, prefix) for y in x])
+        return tuple(append_str_prefix(y, prefix) for y in x)
     elif isinstance(x, list):
         return [append_str_prefix(y, prefix) for y in x]
     else:

@@ -50,25 +50,29 @@ class WQLinear_GEMM(nn.Module):
         awq_linear = cls(w_bit, group_size, linear.in_features, linear.out_features, linear.bias is not None, linear.weight.device)
         if init_only:  # just prepare for loading sd
             return awq_linear
-        
+
         # need scales and zeros info for real quantization
-        assert scales is not None and zeros is not None  
+        assert scales is not None and zeros is not None
         scale_zeros = zeros * scales
-        
+
         awq_linear.scales = scales.clone().half()
         if linear.bias is not None:
             awq_linear.bias = linear.bias.clone().half()
 
         pack_num = 32 // awq_linear.w_bit
-        
-        intweight = []
-        for idx in range(awq_linear.in_features):
-            intweight.append(torch.round((linear.weight.data[:, idx] + scale_zeros[idx // group_size]) / awq_linear.scales[idx // group_size]).to(torch.int)[:, None])
+
+        intweight = [
+            torch.round(
+                (linear.weight.data[:, idx] + scale_zeros[idx // group_size])
+                / awq_linear.scales[idx // group_size]
+            ).to(torch.int)[:, None]
+            for idx in range(awq_linear.in_features)
+        ]
         intweight = torch.cat(intweight, dim=1)
         intweight = intweight.t().contiguous()
         intweight = intweight.to(dtype=torch.int32)
         qweight = torch.zeros((intweight.shape[0], intweight.shape[1] // 32 * awq_linear.w_bit), dtype=torch.int32, device=intweight.device)           
-         
+
         for col in range(intweight.shape[1] // pack_num):
             if awq_linear.w_bit == 4:
                 order_map = [0, 2, 4, 6, 1, 3, 5, 7]
@@ -81,7 +85,7 @@ class WQLinear_GEMM(nn.Module):
 
         zeros = zeros.to(dtype=torch.int32)
         qzeros = torch.zeros((zeros.shape[0], zeros.shape[1] // 32 * awq_linear.w_bit), dtype=torch.int32, device=zeros.device)
-        
+
         for col in range(zeros.shape[1] // pack_num):
             if awq_linear.w_bit == 4:
                 order_map = [0, 2, 4, 6, 1, 3, 5, 7]
@@ -91,7 +95,7 @@ class WQLinear_GEMM(nn.Module):
                 qzero_col = zeros[:, col * pack_num + order_map[i]]
                 qzeros[:, col] |= qzero_col << (i * awq_linear.w_bit)
         awq_linear.qzeros = qzeros
-        
+
         return awq_linear
 
     @torch.no_grad()
@@ -102,9 +106,7 @@ class WQLinear_GEMM(nn.Module):
         return out.reshape(out_shape)
     
     def extra_repr(self) -> str:
-        return 'in_features={}, out_features={}, bias={}, w_bit={}, group_size={}'.format(
-            self.in_features, self.out_features, self.bias is not None, self.w_bit, self.group_size
-        )
+        return f'in_features={self.in_features}, out_features={self.out_features}, bias={self.bias is not None}, w_bit={self.w_bit}, group_size={self.group_size}'
 
 
 class WQLinear_GEMV(nn.Module):
@@ -138,9 +140,9 @@ class WQLinear_GEMV(nn.Module):
         awq_linear = cls(w_bit, group_size, linear.in_features, linear.out_features, linear.bias is not None, linear.weight.device)
         if init_only:  # just prepare for loading sd
             return awq_linear
-        
+
         # need scales and zeros info for real quantization
-        assert scales is not None and zeros is not None  
+        assert scales is not None and zeros is not None
         scale_zeros = zeros * scales
 
         pack_num = 32 // awq_linear.w_bit
@@ -153,14 +155,18 @@ class WQLinear_GEMV(nn.Module):
         awq_linear.scales = qscales
         if linear.bias is not None:
             awq_linear.bias = linear.bias.clone().half()
-        
-        intweight = []
-        for idx in range(awq_linear.in_features):
-            intweight.append(torch.round((linear.weight.data[:, idx] + scale_zeros[:, idx // group_size]) / awq_linear.scales[:, idx // group_size]).to(torch.int)[:, None])
+
+        intweight = [
+            torch.round(
+                (linear.weight.data[:, idx] + scale_zeros[:, idx // group_size])
+                / awq_linear.scales[:, idx // group_size]
+            ).to(torch.int)[:, None]
+            for idx in range(awq_linear.in_features)
+        ]
         intweight = torch.cat(intweight, dim=1)
         intweight = intweight.to(dtype=torch.int32)
         qweight = torch.zeros((intweight.shape[0], intweight.shape[1] // 32 * awq_linear.w_bit), dtype=torch.int32, device=intweight.device)           
-         
+
         for col in range(intweight.shape[1] // pack_num):
             if awq_linear.w_bit == 4:
                 order_map = [0, 1, 2, 3, 4, 5, 6, 7]
@@ -177,7 +183,7 @@ class WQLinear_GEMV(nn.Module):
             dtype=torch.int32,
             device=zeros.device,
         )
-        
+
         for col in range((zeros.shape[1] + pack_num - 1) // pack_num):
             if awq_linear.w_bit == 4:
                 order_map = [0, 1, 2, 3, 4, 5, 6, 7]
@@ -205,6 +211,4 @@ class WQLinear_GEMV(nn.Module):
         return out.reshape(out_shape)
     
     def extra_repr(self) -> str:
-        return 'in_features={}, out_features={}, bias={}, w_bit={}, group_size={}'.format(
-            self.in_features, self.out_features, self.bias is not None, self.w_bit, self.group_size
-        )
+        return f'in_features={self.in_features}, out_features={self.out_features}, bias={self.bias is not None}, w_bit={self.w_bit}, group_size={self.group_size}'

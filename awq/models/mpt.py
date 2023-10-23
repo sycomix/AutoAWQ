@@ -81,11 +81,9 @@ class MptFuser:
         ]
 
     def fuse_transformer(self):
-        blocks = []
-
         module: OldMptBlock
-        for module in self.model.transformer.blocks:
-            blocks.append(MPTBlock(
+        blocks = [
+            MPTBlock(
                 self.model.config.d_model,
                 self.model.config.n_heads,
                 module.attn.Wqkv,
@@ -93,10 +91,11 @@ class MptFuser:
                 module.ffn,
                 module.norm_1,
                 module.norm_2,
-                next(iter(module.state_dict().values())).device, 
-                self.model.config.max_new_tokens
-            ))
-
+                next(iter(module.state_dict().values())).device,
+                self.model.config.max_new_tokens,
+            )
+            for module in self.model.transformer.blocks
+        ]
         self.model.transformer = MPTModel(
             self.model.config.vocab_size,
             blocks,
